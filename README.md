@@ -38,10 +38,27 @@ This bot implements a systematic approach to trading SPX 0DTE credit spreads:
 
 3. **Configure environment variables** (create `.env` file):
    ```bash
+   # Schwab API (required)
    SCHWAB_CLIENT_ID=your_client_id
    SCHWAB_CLIENT_SECRET=your_client_secret
    SCHWAB_REDIRECT_URI=https://127.0.0.1:8080/callback
+   
+   # Email Configuration (for EOD reports - optional)
+   EMAIL_SENDER=your-email@gmail.com
+   EMAIL_PASSWORD=your-app-password
+   EMAIL_RECIPIENT=recipient@example.com
+   
+   # Position Sizing (optional - has defaults)
+   DAILY_RISK_PCT=0.03
+   MIN_CONTRACTS=1
+   MAX_CONTRACTS=50
+   
+   # Safety Gates (optional - defaults are safe)
+   DRY_RUN=true
+   ENABLE_LIVE_TRADING=false
    ```
+   
+   See `EMAIL_SETUP.md` for detailed email configuration instructions.
 
 4. **Authenticate with Schwab API**:
    ```bash
