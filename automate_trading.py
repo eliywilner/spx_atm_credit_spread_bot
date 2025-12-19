@@ -475,6 +475,7 @@ def main():
     # FIRST THING: Download .env file from S3 (if configured)
     # This must happen before loading environment variables
     # Uses IAM role on EC2 (configured via IAM role attached to EC2 instance)
+    # .env is stored in: spx-atm-credit-spread-bot-config bucket
     env_file_path = '.env'
     env_downloaded = False
     
@@ -482,7 +483,7 @@ def main():
         from src.storage.s3_service import S3Service
         
         # Get bucket name from system environment variable (set on EC2)
-        # User must set AWS_S3_CONFIG_BUCKET_NAME environment variable on EC2
+        # Must be set to: spx-atm-credit-spread-bot-config
         config_bucket = os.environ.get('AWS_S3_CONFIG_BUCKET_NAME')
         env_s3_key = os.environ.get('AWS_S3_ENV_KEY', '.env')
         
@@ -517,12 +518,13 @@ def main():
     # SECOND: Download tokens.json from S3 (if configured)
     # This must happen before any authentication attempts
     # Uses IAM role on EC2 (configured via IAM role attached to EC2 instance)
+    # tokens.json is stored in: my-tokens bucket (separate from .env bucket)
     try:
         from src.storage.s3_service import S3Service
         
-        # Use separate token bucket if specified, otherwise use config bucket
-        # Priority: AWS_S3_TOKEN_BUCKET_NAME > AWS_S3_CONFIG_BUCKET_NAME
-        token_bucket_name = os.getenv('AWS_S3_TOKEN_BUCKET_NAME') or os.getenv('AWS_S3_CONFIG_BUCKET_NAME')
+        # tokens.json MUST come from the dedicated token bucket (my-tokens)
+        # Do NOT fall back to config bucket - tokens.json is in a separate bucket
+        token_bucket_name = os.getenv('AWS_S3_TOKEN_BUCKET_NAME')
         if token_bucket_name:
             logger.info(f"Checking for tokens.json in S3 bucket: {token_bucket_name}")
             try:
@@ -544,7 +546,7 @@ def main():
             except Exception as e:
                 logger.warning(f"⚠️  S3 token download failed (using local if exists): {e}")
         else:
-            logger.info("S3 token bucket not configured (set AWS_S3_TOKEN_BUCKET_NAME or AWS_S3_CONFIG_BUCKET_NAME), using local tokens.json if exists")
+            logger.info("S3 token bucket not configured (set AWS_S3_TOKEN_BUCKET_NAME to 'my-tokens'), using local tokens.json if exists")
     except Exception as e:
         logger.debug(f"S3 not available for token download (using local if exists): {e}")
     

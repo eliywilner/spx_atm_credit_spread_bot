@@ -30,8 +30,10 @@ The bot downloads `.env` and `tokens.json` from S3 at startup before running. Th
            "s3:ListBucket"
          ],
          "Resource": [
-           "arn:aws:s3:::your-bucket-name/*",
-           "arn:aws:s3:::your-bucket-name"
+           "arn:aws:s3:::spx-atm-credit-spread-bot-config/*",
+           "arn:aws:s3:::spx-atm-credit-spread-bot-config",
+           "arn:aws:s3:::my-tokens/*",
+           "arn:aws:s3:::my-tokens"
          ]
        }
      ]
@@ -44,17 +46,21 @@ Set these environment variables on your EC2 instance before running the bot:
 
 ```bash
 # For .env file (REQUIRED if using S3)
-export AWS_S3_CONFIG_BUCKET_NAME=your-config-bucket-name
+# Must be set to: spx-atm-credit-spread-bot-config
+export AWS_S3_CONFIG_BUCKET_NAME=spx-atm-credit-spread-bot-config
 
-# For tokens.json (optional - uses config bucket if not set)
-export AWS_S3_TOKEN_BUCKET_NAME=your-token-bucket-name
+# For tokens.json (REQUIRED - separate bucket)
+# Must be set to: my-tokens
+export AWS_S3_TOKEN_BUCKET_NAME=my-tokens
 
 # Optional: Custom S3 keys
 export AWS_S3_ENV_KEY=.env              # Default: .env
 export AWS_S3_TOKEN_KEY=tokens.json     # Default: tokens.json
 ```
 
-**No hardcoded bucket names** - everything is configured via environment variables.
+**Important**: `tokens.json` and `.env` are stored in **separate buckets**:
+- `.env` → `spx-atm-credit-spread-bot-config` bucket
+- `tokens.json` → `my-tokens` bucket (no fallback to config bucket)
 
 ## How It Works
 
@@ -67,8 +73,8 @@ export AWS_S3_TOKEN_KEY=tokens.json     # Default: tokens.json
 ### 2. tokens.json Download (After .env Loaded)
 
 1. Bot loads `.env` file (from S3 or local)
-2. Checks for `AWS_S3_TOKEN_BUCKET_NAME` (or uses config bucket)
-3. Downloads `tokens.json` from S3
+2. Checks for `AWS_S3_TOKEN_BUCKET_NAME` (must be set to `my-tokens`)
+3. Downloads `tokens.json` from `my-tokens` bucket (separate from `.env` bucket)
 4. Falls back to local `tokens.json` if S3 download fails
 
 ## IAM Role Setup (Recommended for EC2)
@@ -85,8 +91,10 @@ export AWS_S3_TOKEN_KEY=tokens.json     # Default: tokens.json
            "s3:ListBucket"
          ],
          "Resource": [
-           "arn:aws:s3:::your-bucket-name/*",
-           "arn:aws:s3:::your-bucket-name"
+           "arn:aws:s3:::spx-atm-credit-spread-bot-config/*",
+           "arn:aws:s3:::spx-atm-credit-spread-bot-config",
+           "arn:aws:s3:::my-tokens/*",
+           "arn:aws:s3:::my-tokens"
          ]
        }
      ]
@@ -101,12 +109,14 @@ export AWS_S3_TOKEN_KEY=tokens.json     # Default: tokens.json
 Your S3 buckets should contain:
 
 ```
-your-config-bucket/
+spx-atm-credit-spread-bot-config/
   └── .env
 
-your-token-bucket/  (or same bucket)
+my-tokens/
   └── tokens.json
 ```
+
+**Note**: These are **separate buckets**. `tokens.json` is stored in `my-tokens` bucket, not in the config bucket.
 
 ## Testing
 
