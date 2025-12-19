@@ -20,8 +20,12 @@ logs/
 tracking/*.csv
 !tracking/.gitkeep
 
-# Reports
-reports/
+# Reports (generated reports, but keep source code)
+reports/*.txt
+reports/*.log
+reports/*.csv
+reports/*.png
+!src/reports/
 
 # IDE
 .vscode/

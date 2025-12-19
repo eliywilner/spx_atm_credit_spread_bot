@@ -220,6 +220,8 @@ def monitor_quotes_and_place_order(
                     'order_status': order_status
                 }
                 
+                # NOTE: No trade alert email sent (user doesn't want immediate alerts)
+                
                 trade_logger.log_trade(trade_data)
                 
                 # Save to S3 after trade is logged
@@ -643,6 +645,54 @@ def main():
     trade_data = order_result.get('trade_data', {})
     if trade_data:
         calculate_eod_pl(today_dt, trade_data)
+        
+        # Generate and send EOD report
+        logger.info("")
+        logger.info("=" * 70)
+        logger.info("GENERATING END OF DAY REPORT")
+        logger.info("=" * 70)
+        
+        try:
+            from src.reports.eod_report import EODReport
+            
+            # Get setup name from trade data or determine from OR
+            setup = trade_data.get('setup', 'Unknown')
+            if not setup or setup == 'Unknown':
+                orc = or_data.get('ORC', 0)
+                oro = or_data.get('ORO', 0)
+                if orc > oro:
+                    setup = 'Bullish OR'
+                elif orc < oro:
+                    setup = 'Bearish ORL Breakout'
+                else:
+                    setup = 'Unknown'
+            
+            eod_report = EODReport()
+            report_path = eod_report.generate_eod_report(
+                date=today_dt,
+                trade_data=trade_data,
+                or_data=or_data,
+                setup=setup
+            )
+            
+            # Send email if configured
+            recipient_email = os.getenv('EMAIL_RECIPIENT')
+            if recipient_email:
+                logger.info("")
+                logger.info("Sending EOD report via email...")
+                email_sent = eod_report.send_eod_email(report_path, recipient_email=recipient_email)
+                if email_sent:
+                    logger.info("✅ EOD email sent successfully!")
+                else:
+                    logger.warning("⚠️  EOD email sending failed. Report saved to file.")
+            else:
+                logger.info("")
+                logger.info("Email recipient not configured (EMAIL_RECIPIENT not set in .env)")
+                logger.info("Report saved to file only.")
+        except Exception as e:
+            logger.error(f"❌ Failed to generate/send EOD report: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     logger.info("")
     logger.info("=" * 70)
