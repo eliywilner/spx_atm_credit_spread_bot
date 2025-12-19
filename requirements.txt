@@ -1,0 +1,6 @@
+requests
+python-dotenv
+pytz
+boto3
+matplotlib
+
