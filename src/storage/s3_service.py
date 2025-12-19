@@ -21,7 +21,7 @@ class S3Service:
         bucket_name: Optional[str] = None,
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
-        region_name: str = 'us-east-1'
+        region_name: str = 'us-east-2'
     ):
         """
         Initialize S3 service.
@@ -30,13 +30,13 @@ class S3Service:
             bucket_name: S3 bucket name. If None, reads from environment variable.
             aws_access_key_id: AWS access key. If None, reads from environment variable.
             aws_secret_access_key: AWS secret key. If None, reads from environment variable.
-            region_name: AWS region name (default: us-east-1)
+            region_name: AWS region name (default: us-east-2)
         """
         # Get credentials from environment if not provided
         self.bucket_name = bucket_name or os.getenv('AWS_S3_BUCKET_NAME')
         aws_access_key_id = aws_access_key_id or os.getenv('AWS_ACCESS_KEY_ID')
         aws_secret_access_key = aws_secret_access_key or os.getenv('AWS_SECRET_ACCESS_KEY')
-        self.region_name = region_name or os.getenv('AWS_REGION', 'us-east-1')
+        self.region_name = region_name or os.getenv('AWS_REGION', 'us-east-2')
         
         # Initialize S3 client
         try:
