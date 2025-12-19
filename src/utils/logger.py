@@ -1,7 +1,9 @@
 """Logging configuration."""
 import logging
 import sys
+import os
 import pytz
+from pathlib import Path
 from datetime import datetime
 
 
@@ -25,6 +27,7 @@ class ETFormatter(logging.Formatter):
 def setup_logger(name: str = "spx_atm_bot", level: int = logging.INFO) -> logging.Logger:
     """
     Set up and configure logger with Eastern Time timestamps.
+    Logs to both console (stdout) and file (logs/bot_YYYY-MM-DD.log).
     
     Args:
         name: Logger name
@@ -40,19 +43,36 @@ def setup_logger(name: str = "spx_atm_bot", level: int = logging.INFO) -> loggin
     if logger.handlers:
         return logger
     
-    # Create console handler
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level)
-    
     # Create formatter with ET timezone
     formatter = ETFormatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S %Z'
     )
-    handler.setFormatter(formatter)
     
-    # Add handler to logger
-    logger.addHandler(handler)
+    # Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    # Create file handler (logs to logs/bot_YYYY-MM-DD.log)
+    try:
+        # Get project root (assume this file is in src/utils/)
+        project_root = Path(__file__).parent.parent.parent
+        logs_dir = project_root / 'logs'
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create log file with today's date
+        today = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
+        log_file = logs_dir / f'bot_{today}.log'
+        
+        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except Exception as e:
+        # If file logging fails, continue with console logging only
+        logger.warning(f"Failed to set up file logging: {e}")
     
     return logger
 
