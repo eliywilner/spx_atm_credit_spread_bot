@@ -67,8 +67,9 @@ log ""
 log "Step 3: Starting bot..."
 log "=========================================="
 
-# Run the bot (remove --dry-run when ready for live trading)
-python3 automate_trading.py --dry-run >> logs/cron.log 2>&1
+# Run the bot (LIVE TRADING - no --dry-run flag)
+# Bot will use DRY_RUN and ENABLE_LIVE_TRADING from .env file
+python3 automate_trading.py >> logs/cron.log 2>&1
 
 BOT_EXIT_CODE=$?
 
