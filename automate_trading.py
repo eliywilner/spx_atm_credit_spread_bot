@@ -585,7 +585,10 @@ def main():
     # Wait until market open
     wait_until_time(MARKET_OPEN, "Market Open")
     
-    # Get Opening Range
+    # Wait until 10:00 (when the Opening Range candle closes)
+    wait_until_time(OR_END, "OR End (10:00)")
+    
+    # Get Opening Range AFTER the candle has closed
     logger.info("")
     logger.info("=" * 70)
     logger.info("GETTING OPENING RANGE (09:30-10:00)")
@@ -597,9 +600,6 @@ def main():
     if not or_data:
         logger.error("❌ Could not get Opening Range - Exiting")
         sys.exit(1)
-    
-    # Wait until 10:00
-    wait_until_time(OR_END, "OR End (10:00)")
     
     # Get account equity for position sizing
     account_mgr = AccountManager()
