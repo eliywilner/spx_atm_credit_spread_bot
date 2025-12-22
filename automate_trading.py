@@ -306,6 +306,12 @@ def step_b_bearish_orl_breakout(date: datetime, or_data: Dict, account_equity: f
     """
     Step B: Bearish ORL Breakout setup (10:00-12:00).
     
+    Scans for breakout by checking completed 30-minute candles one by one:
+    - 10:00-10:30 candle: check at 10:30
+    - 10:30-11:00 candle: check at 11:00
+    - 11:00-11:30 candle: check at 11:30
+    - 11:30-12:00 candle: check at 12:00
+    
     Args:
         date: Trading date
         or_data: Opening Range data
@@ -331,57 +337,79 @@ def step_b_bearish_orl_breakout(date: datetime, or_data: Dict, account_equity: f
     
     orl = or_data.get('ORL', 0)
     logger.info(f"Scanning for breakout: bar_close < ORL (${orl:.2f})")
+    logger.info("Will check completed candles at: 10:30, 11:00, 11:30, 12:00")
     
-    # Get 30-minute candles from 10:00 to 12:00
     market_data = MarketDataFetcher()
-    candles = market_data.get_30min_candles(
-        date,
-        start_hour=10,
-        start_minute=0,
-        end_hour=12,
-        end_minute=0
-    )
     
-    if not candles:
-        logger.warning("No candles found for 10:00-12:00 window")
-        return None
+    # Define the candle windows to check (each closes 30 minutes after start)
+    candle_windows = [
+        (10, 0, 10, 30),  # 10:00-10:30, check at 10:30
+        (10, 30, 11, 0),  # 10:30-11:00, check at 11:00
+        (11, 0, 11, 30),  # 11:00-11:30, check at 11:30
+        (11, 30, 12, 0),  # 11:30-12:00, check at 12:00
+    ]
     
-    # Find FIRST bar where bar_close < ORL
-    breakout_candle = None
-    for candle in candles:
+    # Check each candle window as it completes
+    for start_hour, start_min, end_hour, end_min in candle_windows:
+        check_time = dt_time(end_hour, end_min)
+        
+        # Wait until the candle closes
+        wait_until_time(check_time, f"Candle close ({start_hour:02d}:{start_min:02d}-{end_hour:02d}:{end_min:02d})")
+        
+        # Get the completed candle
+        candles = market_data.get_30min_candles(
+            date,
+            start_hour=start_hour,
+            start_minute=start_min,
+            end_hour=end_hour,
+            end_minute=end_min
+        )
+        
+        if not candles:
+            logger.warning(f"No candle found for {start_hour:02d}:{start_min:02d}-{end_hour:02d}:{end_min:02d} window")
+            continue
+        
+        # Get the candle (should be only one)
+        candle = candles[0] if candles else None
+        if not candle:
+            continue
+        
         bar_close = candle.get('close', 0)
+        logger.info(f"Checking {start_hour:02d}:{start_min:02d}-{end_hour:02d}:{end_min:02d} candle: bar_close=${bar_close:.2f}, ORL=${orl:.2f}")
+        
+        # Check for breakout
         if bar_close < orl:
-            breakout_candle = candle
             logger.info(f"✅ Breakout found: bar_close=${bar_close:.2f} < ORL=${orl:.2f}")
-            break
+            
+            # Set SPX_entry = breakout_bar_close
+            spx_entry = bar_close
+            trigger_time = datetime.now(ET)
+            
+            logger.info(f"SPX_entry = breakout_bar_close = ${spx_entry:.2f}")
+            
+            # Compute strikes ONCE for CALL spread
+            k_short, k_long = StrikeCalculator.calculate_call_spread_strikes(spx_entry)
+            
+            logger.info(f"CALL spread strikes: K_short=${k_short:.2f}, K_long=${k_long:.2f}")
+            
+            # Monitor quotes and place order
+            return monitor_quotes_and_place_order(
+                date=date,
+                spx_entry=spx_entry,
+                k_short=k_short,
+                k_long=k_long,
+                option_type='CALL',
+                setup='Bearish ORL Breakout',
+                or_data=or_data,
+                account_equity=account_equity,
+                trigger_time=trigger_time
+            )
+        else:
+            logger.info(f"No breakout: bar_close=${bar_close:.2f} >= ORL=${orl:.2f}")
     
-    if not breakout_candle:
-        logger.info("No breakout candle found (bar_close >= ORL for all bars)")
-        return None
-    
-    # Set SPX_entry = breakout_bar_close
-    spx_entry = breakout_candle.get('close', 0)
-    trigger_time = datetime.now(ET)
-    
-    logger.info(f"SPX_entry = breakout_bar_close = ${spx_entry:.2f}")
-    
-    # Compute strikes ONCE for CALL spread
-    k_short, k_long = StrikeCalculator.calculate_call_spread_strikes(spx_entry)
-    
-    logger.info(f"CALL spread strikes: K_short=${k_short:.2f}, K_long=${k_long:.2f}")
-    
-    # Monitor quotes and place order
-    return monitor_quotes_and_place_order(
-        date=date,
-        spx_entry=spx_entry,
-        k_short=k_short,
-        k_long=k_long,
-        option_type='CALL',
-        setup='Bearish ORL Breakout',
-        or_data=or_data,
-        account_equity=account_equity,
-        trigger_time=trigger_time
-    )
+    # No breakout found in any completed candle
+    logger.info("No breakout candle found (bar_close >= ORL for all completed bars)")
+    return None
 
 
 def calculate_eod_pl(date: datetime, trade_data: Dict) -> Dict:
