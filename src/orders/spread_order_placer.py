@@ -48,18 +48,15 @@ class SpreadOrderPlacer:
         Returns:
             Order response dictionary
         """
-        # Format strikes (multiply by 1000 for SPXW)
-        short_strike_int = int(k_short * 1000)
-        long_strike_int = int(k_long * 1000)
-        
+        # Format strikes (pass raw strike values, _format_option_symbol will multiply by 1000)
         option_type_char = 'P' if option_type == 'PUT' else 'C'
         
-        # Format option symbols
+        # Format option symbols (pass raw strikes, e.g., 6875, not 6875000)
         short_symbol = self.quotes_mgr._format_option_symbol(
-            'SPXW', date, option_type_char, short_strike_int
+            'SPXW', date, option_type_char, k_short
         )
         long_symbol = self.quotes_mgr._format_option_symbol(
-            'SPXW', date, option_type_char, long_strike_int
+            'SPXW', date, option_type_char, k_long
         )
         
         logger.info(f"Placing {option_type} credit spread:")
