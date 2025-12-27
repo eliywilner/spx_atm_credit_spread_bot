@@ -369,9 +369,23 @@ def step_b_bearish_orl_breakout(date: datetime, or_data: Dict, account_equity: f
             logger.warning(f"No candle found for {start_hour:02d}:{start_min:02d}-{end_hour:02d}:{end_min:02d} window")
             continue
         
-        # Get the candle (should be only one)
-        candle = candles[0] if candles else None
+        # Find the candle that matches the requested time window
+        # The candle's 'datetime' field is the start timestamp of that candle
+        window_start = date.replace(hour=start_hour, minute=start_min, second=0, microsecond=0)
+        if window_start.tzinfo is None:
+            window_start = ET.localize(window_start)
+        window_start_ts = int(window_start.timestamp() * 1000)
+        
+        # Find candle where datetime matches our target window start
+        candle = None
+        for c in candles:
+            candle_dt = c.get('datetime', 0)
+            if candle_dt == window_start_ts:
+                candle = c
+                break
+        
         if not candle:
+            logger.warning(f"Could not find candle matching {start_hour:02d}:{start_min:02d}-{end_hour:02d}:{end_min:02d} window")
             continue
         
         bar_close = candle.get('close', 0)
