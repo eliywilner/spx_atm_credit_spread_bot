@@ -1,6 +1,8 @@
 """Order placer for SPXW 10-wide credit spreads."""
 import json
 import requests
+import re
+import time
 from datetime import datetime
 from typing import Optional, Dict
 from src.client.schwab_client import SchwabClient
@@ -149,8 +151,113 @@ class SpreadOrderPlacer:
                 headers['Content-Type'] = 'application/json'
                 response = requests.post(url, json=order, headers=headers, timeout=10)
             
+            # Log response details for debugging
+            logger.debug(f"Response status code: {response.status_code}")
+            logger.debug(f"Response headers: {dict(response.headers)}")
+            logger.debug(f"Response text length: {len(response.text) if response.text else 0}")
+            
             response.raise_for_status()
-            order_response = response.json()
+            
+            # Handle 201 Created or empty response body (Schwab API returns 201 Created with empty body)
+            # Order ID is in the Location header
+            if response.status_code == 201 or response.status_code == 204 or not response.text or response.text.strip() == '':
+                logger.info(f"Order placement returned {response.status_code} with empty response body")
+                logger.info("This is normal - order ID is in the Location header")
+                
+                # Extract order ID from Location header
+                location_header = response.headers.get('Location', '')
+                order_id = None
+                
+                if location_header:
+                    # Extract order ID from Location URL
+                    # Format: https://api.schwabapi.com/trader/v1/accounts/{hash}/orders/{orderId}
+                    order_id_match = re.search(r'/orders/(\d+)$', location_header)
+                    if order_id_match:
+                        order_id = order_id_match.group(1)
+                        logger.info(f"✅ Extracted Order ID from Location header: {order_id}")
+                    else:
+                        logger.warning(f"Could not extract order ID from Location header: {location_header}")
+                
+                # Wait a moment for order to be processed in the system
+                logger.info("Waiting for order to be processed...")
+                time.sleep(2)
+                
+                # Get order confirmation from recent orders
+                try:
+                    recent_orders = self.account_mgr.get_orders_executed_today(
+                        account_number=account_number,
+                        max_results=10
+                    )
+                    
+                    if recent_orders:
+                        # If we have order_id from Location header, find that specific order
+                        # Otherwise, use the most recent order
+                        order_details = None
+                        if order_id:
+                            for order in recent_orders:
+                                if str(order.get('orderId', '')) == str(order_id):
+                                    order_details = order
+                                    break
+                        
+                        # If not found by ID or no ID, use most recent
+                        if not order_details:
+                            order_details = recent_orders[0]
+                            if order_id:
+                                logger.warning(f"Order ID {order_id} not found in recent orders, using most recent order")
+                            else:
+                                logger.info("Using most recent order (no order ID from Location header)")
+                        
+                        confirmed_order_id = order_details.get('orderId', order_id or 'PENDING')
+                        order_status = order_details.get('status', 'ACCEPTED')
+                        entered_time = order_details.get('enteredTime', 'N/A')
+                        
+                        logger.info(f"✅ Order confirmed from recent orders:")
+                        logger.info(f"  Order ID: {confirmed_order_id}")
+                        logger.info(f"  Status: {order_status}")
+                        logger.info(f"  Entered Time: {entered_time}")
+                        
+                        return {
+                            'orderId': confirmed_order_id,
+                            'status': order_status,
+                            'order_details': order_details
+                        }
+                    else:
+                        logger.warning("Could not find order in recent orders list")
+                        if order_id:
+                            # We have order ID from Location header, return it
+                            logger.info(f"Returning order ID from Location header: {order_id}")
+                            return {
+                                'orderId': order_id,
+                                'status': 'ACCEPTED',
+                                'order_details': {'orderId': order_id, 'status': 'ACCEPTED', 'message': 'Order placed, details pending'}
+                            }
+                except Exception as verify_error:
+                    logger.warning(f"Could not verify order from recent orders: {verify_error}")
+                    if order_id:
+                        # We have order ID from Location header, return it
+                        logger.info(f"Returning order ID from Location header: {order_id}")
+                        return {
+                            'orderId': order_id,
+                            'status': 'ACCEPTED',
+                            'order_details': {'orderId': order_id, 'status': 'ACCEPTED', 'message': 'Order placed, verification failed'}
+                        }
+                
+                # Fallback: return response indicating success but no order details
+                logger.warning("⚠️  Order placed but could not get confirmation")
+                return {
+                    'orderId': order_id or 'PENDING',
+                    'status': 'ACCEPTED',
+                    'order_details': {'message': 'Order accepted, empty response from API', 'orderId': order_id or 'PENDING'}
+                }
+            
+            # Parse JSON response (for APIs that return JSON in body)
+            try:
+                order_response = response.json()
+            except ValueError as json_error:
+                logger.error(f"Failed to parse JSON response: {json_error}")
+                logger.error(f"Response status: {response.status_code}")
+                logger.error(f"Response text: {response.text[:500] if response.text else '(empty)'}")
+                raise ValueError(f"Invalid JSON response from API: {json_error}")
             
             order_id = order_response.get('orderId', '')
             order_status = order_response.get('status', '')
@@ -167,12 +274,21 @@ class SpreadOrderPlacer:
             
         except requests.exceptions.HTTPError as e:
             logger.error(f"HTTP Error placing order: {e}")
+            logger.error(f"Status code: {response.status_code}")
             if response.text:
-                logger.error(f"Response: {response.text}")
+                logger.error(f"Response body: {response.text[:1000]}")  # First 1000 chars
+            else:
+                logger.error("Response body is empty")
+            raise
+        except ValueError as e:
+            # JSON parsing error
+            logger.error(f"JSON parsing error: {e}")
+            logger.error(f"Response status: {response.status_code}")
+            logger.error(f"Response text: {response.text[:1000] if response.text else '(empty)'}")
             raise
         except Exception as e:
             logger.error(f"Error placing order: {e}")
             import traceback
-            logger.debug(traceback.format_exc())
+            logger.error(traceback.format_exc())
             raise
 

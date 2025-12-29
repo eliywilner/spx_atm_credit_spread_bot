@@ -78,7 +78,14 @@ class MarketDataFetcher:
                 logger.error(f"Failed to get candles: {response.status_code} - {response.text}")
                 return []
             
-            data = response.json()
+            # Parse JSON response
+            try:
+                data = response.json()
+            except ValueError as json_error:
+                logger.error(f"Failed to parse JSON response: {json_error}")
+                logger.error(f"Response text: {response.text[:500] if response.text else '(empty)'}")
+                return []
+            
             candles = data.get('candles', [])
             
             # Sort by datetime

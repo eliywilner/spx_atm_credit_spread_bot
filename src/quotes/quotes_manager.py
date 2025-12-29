@@ -89,7 +89,15 @@ class QuotesManager:
                 )
             
             response.raise_for_status()
-            return response.json()
+            
+            # Parse JSON response
+            try:
+                return response.json()
+            except ValueError as json_error:
+                logger.error(f"Failed to parse JSON response: {json_error}")
+                logger.error(f"Response status: {response.status_code}")
+                logger.error(f"Response text: {response.text[:500] if response.text else '(empty)'}")
+                raise ValueError(f"Invalid JSON response from API: {json_error}")
             
         except requests.exceptions.HTTPError as e:
             logger.error(f"HTTP Error: {e}")
