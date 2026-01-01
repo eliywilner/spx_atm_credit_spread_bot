@@ -119,9 +119,24 @@ class EODReport:
         report_lines.append(f"  Spread Width:           10 points")
         report_lines.append("")
         report_lines.append("Credit:")
-        report_lines.append(f"  C_gross (fill):          ${trade_data.get('C_gross_fill', 0):.2f}")
-        report_lines.append(f"  Slippage Buffer (S):     ${trade_data.get('S', 0):.2f}")
-        report_lines.append(f"  C_net (fill):            ${trade_data.get('C_net_fill', 0):.2f}")
+        
+        # Check if we have actual fill credit from broker
+        fill_source = trade_data.get('C_net_fill_source', 'CALCULATED')
+        actual_fill = trade_data.get('C_net_fill_actual')
+        calculated_fill = trade_data.get('C_net_fill', 0)
+        
+        if actual_fill is not None and fill_source == 'BROKER':
+            # Show actual fill credit from broker
+            report_lines.append(f"  C_net (actual fill):     ${actual_fill:.2f} ✅ FROM BROKER")
+            if abs(actual_fill - calculated_fill) > 0.01:  # If difference > 1 cent
+                report_lines.append(f"  C_net (calculated):      ${calculated_fill:.2f} (not used)")
+                report_lines.append(f"  Difference:              ${actual_fill - calculated_fill:.2f}")
+        else:
+            # Fallback to calculated values
+            report_lines.append(f"  C_gross (fill):          ${trade_data.get('C_gross_fill', 0):.2f}")
+            report_lines.append(f"  Slippage Buffer (S):     ${trade_data.get('S', 0):.2f}")
+            report_lines.append(f"  C_net (fill):            ${calculated_fill:.2f} ⚠️  CALCULATED")
+        
         report_lines.append("")
         report_lines.append("Position:")
         report_lines.append(f"  Quantity:                {trade_data.get('qty', 0)} contracts")

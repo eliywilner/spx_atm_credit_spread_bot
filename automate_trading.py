@@ -455,22 +455,83 @@ def calculate_eod_pl(date: datetime, trade_data: Dict) -> Dict:
     # Get trade parameters
     trade_type = trade_data.get('trade_type', '')
     k_short = float(trade_data.get('K_short', 0))
-    c_net_fill = float(trade_data.get('C_net_fill', 0))
+    c_net_fill = float(trade_data.get('C_net_fill', 0))  # Fallback calculated value
     qty = int(trade_data.get('qty', 0))
+    order_id = trade_data.get('order_id', '')
     
-    # Calculate P/L
+    # Try to get actual fill credit from filled order
+    actual_fill_credit = None
+    if order_id:
+        try:
+            from src.orders.order_utils import get_actual_fill_credit_from_order
+            
+            logger.info("")
+            logger.info("Attempting to get actual fill credit from broker...")
+            logger.info(f"Order ID: {order_id}")
+            
+            account_mgr = AccountManager()
+            
+            # Get filled orders from today
+            filled_orders = account_mgr.get_orders_executed_today(
+                status='FILLED',
+                max_results=10
+            )
+            
+            # Find our order
+            our_order = None
+            for order in filled_orders:
+                if str(order.get('orderId', '')) == str(order_id):
+                    our_order = order
+                    break
+            
+            if our_order:
+                actual_fill_credit = get_actual_fill_credit_from_order(our_order)
+                if actual_fill_credit is not None:
+                    logger.info(f"✅ Found actual fill credit from broker: ${actual_fill_credit:.2f}")
+                    if abs(actual_fill_credit - c_net_fill) > 0.01:  # If difference > 1 cent
+                        logger.info(f"   Difference from calculated: ${actual_fill_credit - c_net_fill:.2f}")
+                        logger.info(f"   (Calculated was: ${c_net_fill:.2f})")
+                    # Update trade_data with actual fill credit
+                    trade_data['C_net_fill_actual'] = actual_fill_credit
+                    trade_data['C_net_fill_source'] = 'BROKER'
+                else:
+                    logger.warning("⚠️  Could not extract fill credit from order, using calculated value")
+                    trade_data['C_net_fill_source'] = 'CALCULATED'
+            else:
+                logger.warning(f"⚠️  Order {order_id} not found in filled orders, using calculated value")
+                trade_data['C_net_fill_source'] = 'CALCULATED'
+        except Exception as e:
+            logger.warning(f"⚠️  Error getting actual fill credit: {e}, using calculated value")
+            import traceback
+            logger.debug(traceback.format_exc())
+            trade_data['C_net_fill_source'] = 'CALCULATED'
+    else:
+        logger.warning("⚠️  No order_id in trade_data, using calculated value")
+        trade_data['C_net_fill_source'] = 'CALCULATED'
+    
+    # Use actual fill credit if available, otherwise use calculated
+    fill_credit_for_pl = actual_fill_credit if actual_fill_credit is not None else c_net_fill
+    
+    if actual_fill_credit is not None:
+        logger.info(f"Using actual fill credit: ${fill_credit_for_pl:.2f} for P/L calculation")
+    else:
+        logger.info(f"Using calculated fill credit: ${fill_credit_for_pl:.2f} for P/L calculation")
+    
+    logger.info("")
+    
+    # Calculate P/L using actual fill credit
     if trade_type == 'PUT':
         pl_data = PLCalculator.calculate_put_spread_pl(
             k_short=k_short,
             spx_close=spx_close,
-            c_net_fill=c_net_fill,
+            c_net_fill=fill_credit_for_pl,  # Use actual fill credit
             qty=qty
         )
     else:  # CALL
         pl_data = PLCalculator.calculate_call_spread_pl(
             k_short=k_short,
             spx_close=spx_close,
-            c_net_fill=c_net_fill,
+            c_net_fill=fill_credit_for_pl,  # Use actual fill credit
             qty=qty
         )
     
