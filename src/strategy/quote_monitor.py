@@ -111,6 +111,12 @@ class QuoteMonitor:
             short_quote_data = short_leg_quote.get('quote', {})
             long_quote_data = long_leg_quote.get('quote', {})
             
+            # Extract bid/ask prices for detailed logging
+            short_bid = short_quote_data.get('bidPrice', 0)
+            short_ask = short_quote_data.get('askPrice', 0)
+            long_bid = long_quote_data.get('bidPrice', 0)
+            long_ask = long_quote_data.get('askPrice', 0)
+            
             # Get mid prices using mark (like original bot)
             short_mid = self.calculate_mid_price(short_quote_data)
             long_mid = self.calculate_mid_price(long_quote_data)
@@ -123,11 +129,49 @@ class QuoteMonitor:
                     logger.debug(f"Long leg quote structure: {long_leg_quote}")
                 return None
             
-            # For credit spreads: C_gross = short_mid - long_mid
-            c_gross = short_mid - long_mid
+            # Calculate credit using both methods for comparison
+            # Method 1: Using mid prices (current implementation)
+            c_gross_mid = short_mid - long_mid
+            
+            # Method 2: Using bid/ask (actual executable credit)
+            c_gross_bid_ask = short_bid - long_ask
+            
+            # For credit spreads: C_gross = short_mid - long_mid (current implementation)
+            c_gross = c_gross_mid
             
             # Apply slippage buffer
             c_net = c_gross - Config.SLIPPAGE_BUFFER
+            
+            # DETAILED LOGGING - Show each leg and calculation
+            logger.info("")
+            logger.info("=" * 70)
+            logger.info("SPREAD QUOTE DETAILS")
+            logger.info("=" * 70)
+            logger.info(f"Option Symbols:")
+            logger.info(f"  Short leg: {short_symbol} (K_short=${k_short:.2f})")
+            logger.info(f"  Long leg:  {long_symbol} (K_long=${k_long:.2f})")
+            logger.info("")
+            logger.info("Short Leg (SELL) Quote:")
+            logger.info(f"  Bid: ${short_bid:.2f}")
+            logger.info(f"  Ask: ${short_ask:.2f}")
+            logger.info(f"  Mid: ${short_mid:.2f} = (${short_bid:.2f} + ${short_ask:.2f}) / 2")
+            logger.info("")
+            logger.info("Long Leg (BUY) Quote:")
+            logger.info(f"  Bid: ${long_bid:.2f}")
+            logger.info(f"  Ask: ${long_ask:.2f}")
+            logger.info(f"  Mid: ${long_mid:.2f} = (${long_bid:.2f} + ${long_ask:.2f}) / 2")
+            logger.info("")
+            logger.info("Credit Calculation:")
+            logger.info(f"  Using MID prices:  C_gross = ${short_mid:.2f} - ${long_mid:.2f} = ${c_gross_mid:.2f}")
+            logger.info(f"  Using BID/ASK:     C_gross = ${short_bid:.2f} - ${long_ask:.2f} = ${c_gross_bid_ask:.2f} (actual executable)")
+            logger.info(f"  Difference:        ${abs(c_gross_mid - c_gross_bid_ask):.2f}")
+            logger.info("")
+            logger.info(f"Final Credit (using MID):")
+            logger.info(f"  C_gross: ${c_gross:.2f}")
+            logger.info(f"  Slippage buffer: -${Config.SLIPPAGE_BUFFER:.2f}")
+            logger.info(f"  C_net: ${c_net:.2f}")
+            logger.info("=" * 70)
+            logger.info("")
             
             # Extract bid/ask for logging (using quote_data, same as original bot)
             result = {
@@ -135,10 +179,10 @@ class QuoteMonitor:
                 'C_net': c_net,
                 'short_mid': short_mid,
                 'long_mid': long_mid,
-                'short_bid': short_quote_data.get('bidPrice', 0),
-                'short_ask': short_quote_data.get('askPrice', 0),
-                'long_bid': long_quote_data.get('bidPrice', 0),
-                'long_ask': long_quote_data.get('askPrice', 0)
+                'short_bid': short_bid,
+                'short_ask': short_ask,
+                'long_bid': long_bid,
+                'long_ask': long_ask
             }
             
             logger.debug(f"Spread credit: C_gross=${c_gross:.2f}, C_net=${c_net:.2f} (S=${Config.SLIPPAGE_BUFFER:.2f})")
